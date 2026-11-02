@@ -29,7 +29,7 @@
     <material name="earth_land" rgba="0.2 0.5 0.25 1" />
     <material name="station_white" rgba="0.92 0.92 0.90 1" specular="0.35" />
     <material name="collector_interior" rgba="0.15 0.18 0.22 1" specular="0.2" />
-    <texture name="sphere_texture" file="earth_2048x1024.png" type="2d"/>
+    <texture name="sphere_texture" file="/Users/jaimaini/Developer/final robotics/Main/Group_04_Rishi_Nicholas_Jai/models/earth_2048x1024.png" type="2d"/>
     <material name="earth_mat" texture="sphere_texture" texrepeat="1 1" texuniform="false" rgba="1 1 1 1" />
   </asset>
   <worldbody>

@@ -257,13 +257,6 @@ def rot_error(goal,actual):
 
 
 class Mission:
-    """
-    Dual-Arm Cartesian Impedance Control and Reaction Stabilization
-    Student Implementation Boundaries:
-    - E034 (Rishi): Microgravity kinematics, free-floating base coupling, and tumbling dynamics
-    - E035 (Nicholas): Cartesian impedance control law, trajectory phase synchronization, contact absorption
-    - E036 (Jai): Post-capture momentum stabilization and CSBS space sustainability metrics
-    """
     DT = 0.002
     CONTROL_DT = 0.01
     VISION_DT = 0.10
@@ -291,10 +284,6 @@ class Mission:
         if args.trial:
             import xml.etree.ElementTree as ET
             scene = ET.parse(args.xml).getroot()
-            compiler = scene.find('compiler')
-            if compiler is not None:
-                compiler.set('meshdir', str(Path(args.xml).resolve().parent))
-                compiler.set('texturedir', str(Path(args.xml).resolve().parent))
             world = scene.find('worldbody')
             eq = scene.find('equality')
             for body in list(world):
@@ -399,7 +388,6 @@ class Mission:
         self.finger_q1 = self.Q_OPEN[0]
         self.finger_q2 = self.Q_OPEN[1]
         self.stable_contact_steps = 0
-        self.carry_stage = 0
 
         self.peak_force = 0.0
         self.impulse = 0.0
@@ -461,8 +449,6 @@ class Mission:
         self.phase = phase
         self.phase_time = float(self.data.time)
         self.stable_since = None
-        if phase == 'CARRY':
-            self.carry_stage = 0
         self.log(message)
 
     def abort(self, reason):
@@ -484,13 +470,6 @@ class Mission:
         return self.data.xpos[bid].copy(), self.data.xmat[bid].reshape(3, 3).copy(), v[3:].copy(), v[:3].copy()
 
     def momentum(self):
-        """
-        # TODO [E034 - Rishi Vinod Koli]:
-        Track conservation of linear and angular momentum across unanchored multi-body system:
-        P_total = sum(m_i * v_i)
-        L_total = sum(R_i * (I_i * R_i^T * omega_i) + r_i x (m_i * v_i))
-        Validate zero-gravity multi-body momentum transfer during impact and capture.
-        """
         P = np.zeros(3)
         L = np.zeros(3)
         for b in range(1, self.model.nbody):
@@ -506,13 +485,6 @@ class Mission:
         return P, L
 
     def estimate(self):
-        """
-        # TODO [E034 - Rishi Vinod Koli]:
-        Calculate instantaneous target grapple fixture position and linear velocity:
-        p_fixture = [r * cos(omega*t), r * sin(omega*t)]
-        v_fixture = [-r * omega * sin(omega*t), r * omega * cos(omega*t)]
-        Match end-effector velocity to minimize relative approach velocity Delta v -> 0.
-        """
         o = self.observation
         dt = min(0.20, max(0.0, self.data.time - o.time))
         return o.position + o.velocity * dt, Rotation.from_rotvec(self.target_w * dt).as_matrix() @ o.rotation, o.velocity, self.target_w
@@ -590,12 +562,6 @@ class Mission:
         return bool(np.all(p - extent > [9.55, -4.4, 2.6]) and np.all(p + extent < [15.35, 4.4, 7.4]))
 
     def base_control(self, vmax):
-        """
-        # TODO [E036 - Jai Maini]:
-        Implement the servicer reaction wheel compensation loop:
-        tau_rw = -K_bus * theta_bus - D_bus * omega_bus - sum(tau_arm_reactions)
-        Keep base attitude disturbance within |theta_b| <= 3.5 degrees.
-        """
         p, R, v, w = self.state(self.robot)
         vgoal = limit(0.8 * (self.goal - p), vmax)
         mass = self.model.body_subtreemass[self.robot]
@@ -690,12 +656,6 @@ class Mission:
 
         # Stage C: Progressive Closure
         elif self.phase == 'CLOSE':
-            """
-            # TODO [E035 - Nicholas Lewis]:
-            Implement the Cartesian operational space impedance contact control law:
-            M_d * (ddot{x} - ddot{x}_des) + D_d * (dot{x} - dot{x}_des) + K_d * (x - x_des) = F_ext
-            Calculate the required task force F_task and map it via the transposed Jacobian J^T.
-            """
             if self.args.controller == 'rigid':
                 # Rigid PD step closure (snap closure)
                 self.finger_q1 = self.Q_MAX_CLOSE[0]
@@ -739,44 +699,14 @@ class Mission:
 
         # Stage E: Secure and transport to collection bin
         elif self.phase == 'CARRY':
-            """
-            # TODO [E036 - Jai Maini]:
-            Implement orbital bin transport corridor waypoint navigation:
-            Guide servicer from side/lateral capture positions to front entry corridor (x ~ 4.5)
-            before commanding direct insertion into storage bin (x ~ 10.5).
-            Eliminate side-wall collisions and preserve multi-target sortie economics.
-            """
             # Maintain firm gripping pressure on all 3 fingers
             self.rotation_goal = np.eye(3)
             target_slot = bin_slot - np.array([2.0, 0, 0])
             dist_to_slot = np.linalg.norm(p - target_slot)
 
-            # Two-stage transport state machine:
-            # Stage 0: If grasping from the side or forward, first maneuver to front entry corridor (x ~ 4.5, aligned with bin)
-            # Stage 1: Once at entry corridor, proceed straight into the bin
-            approach_entry = np.array([4.5, bin_slot[1], 5.0])
-
-            if self.carry_stage == 0:
-                # Check if robot already was in front of bin mouth upon grasp
-                if p[0] <= 5.5 and abs(p[1] - bin_slot[1]) <= 1.0:
-                    self.carry_stage = 1
-                else:
-                    # If behind or alongside bin walls (x > 7.0), steer wide around the wall first
-                    if p[0] > 7.0 and abs(p[1]) > 3.0:
-                        clear_y = np.sign(p[1]) * max(abs(p[1]), 6.5)
-                        self.goal = np.array([4.5, clear_y, 5.0])
-                    else:
-                        self.goal = approach_entry
-
-                    # Transition to stage 1 once arrived at entry waypoint
-                    if np.linalg.norm(p - approach_entry) < 0.8:
-                        self.carry_stage = 1
-                    vmax = 1.0 if np.linalg.norm(p - self.goal) > 1.5 else 0.50
-
-            if self.carry_stage == 1:
-                # Fly straight into the bin slot
-                self.goal = target_slot
-                vmax = 1.0 if dist_to_slot > 2.0 else 0.40
+            # Move smoothly into the bin without abrupt acceleration
+            self.goal = target_slot
+            vmax = 1.0 if dist_to_slot > 2.0 else 0.40
 
             # Verify grasp continuity during transport
             # If target escapes during carry, fail gracefully

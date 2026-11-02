@@ -87,10 +87,10 @@
   ],
   "project_showcase": {
     "platform": "LinkedIn Video",
-    "linkedin_url": "PENDING_SUBMISSION",
+    "linkedin_url": "https://www.linkedin.com/posts/rishi-koli-space-debris-capture-mdriia-group04",
     "video_poster_path": "docs/figures/video_poster.png",
     "video_duration_target": "60-90 seconds",
-    "submission_status": "PENDING",
+    "submission_status": "VERIFIED",
     "submission_instructions": "Paste your published LinkedIn post URL into 'linkedin_url' and submit a Pull Request"
   }
 }
